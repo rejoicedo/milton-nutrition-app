@@ -74,29 +74,75 @@ const CaloriesCard = () => (
   </View>
 );
 
+// Circular Progress Ring Component using conic-gradient (web-compatible)
+const CircularProgressRing = ({ 
+  progress, 
+  size = 70, 
+  strokeWidth = 5,
+  progressColor,
+  backgroundColor = 'rgba(255,255,255,0.2)',
+  children 
+}: {
+  progress: number;
+  size?: number;
+  strokeWidth?: number;
+  progressColor: string;
+  backgroundColor?: string;
+  children: React.ReactNode;
+}) => {
+  const degrees = progress * 360;
+  
+  return (
+    <View 
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        justifyContent: 'center',
+        alignItems: 'center',
+        // @ts-ignore - web-only style
+        background: `conic-gradient(${progressColor} ${degrees}deg, ${backgroundColor} ${degrees}deg 360deg)`,
+      }}
+    >
+      <View 
+        style={{
+          width: size - strokeWidth * 2,
+          height: size - strokeWidth * 2,
+          borderRadius: (size - strokeWidth * 2) / 2,
+          backgroundColor: colors.primaryDark,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        {children}
+      </View>
+    </View>
+  );
+};
+
 // Macros Card
 const MacrosCard = () => (
   <View style={styles.macrosCard}>
     <Text style={styles.cardLabelDark}>📊 Macros</Text>
     <View style={styles.macrosRow}>
       <View style={styles.macroItem}>
-        <View style={[styles.macroCircle, { borderColor: '#fff' }]}>
+        <CircularProgressRing progress={78/150} progressColor="#FFFFFF" size={70} strokeWidth={5}>
           <Text style={styles.macroIcon}>🥩</Text>
-        </View>
+        </CircularProgressRing>
         <Text style={styles.macroLabel}>Protein</Text>
         <Text style={styles.macroValue}>78g<Text style={styles.macroGoal}>/150g</Text></Text>
       </View>
       <View style={styles.macroItem}>
-        <View style={[styles.macroCircle, { borderColor: colors.secondary }]}>
+        <CircularProgressRing progress={186/250} progressColor={colors.secondary} size={70} strokeWidth={5}>
           <Text style={styles.macroIcon}>🌾</Text>
-        </View>
+        </CircularProgressRing>
         <Text style={styles.macroLabel}>Carbs</Text>
         <Text style={styles.macroValue}>186g<Text style={styles.macroGoal}>/250g</Text></Text>
       </View>
       <View style={styles.macroItem}>
-        <View style={[styles.macroCircle, { borderColor: colors.accent }]}>
+        <CircularProgressRing progress={46/67} progressColor={colors.accent} size={70} strokeWidth={5}>
           <Text style={styles.macroIcon}>💧</Text>
-        </View>
+        </CircularProgressRing>
         <Text style={styles.macroLabel}>Fats</Text>
         <Text style={styles.macroValue}>46g<Text style={styles.macroGoal}>/67g</Text></Text>
       </View>
