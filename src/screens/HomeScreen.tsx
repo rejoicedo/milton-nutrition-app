@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, StatusBar } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, StatusBar, Text, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '../constants/colors';
-import { Meal, NutritionStats } from '../types';
+import { colors, spacing } from '../constants';
+import { Meal } from '../types';
+import { useMeals, useNutrition } from '../hooks';
 import {
   Header,
   CaloriesCard,
@@ -12,45 +13,7 @@ import {
   ChatFAB,
 } from '../components/dashboard';
 import { EditMealModal } from '../components/modals/EditMealModal';
-
-const mockStats: NutritionStats = {
-  calories: { current: 1847, goal: 2000 },
-  protein: { current: 78, goal: 150 },
-  carbs: { current: 186, goal: 250 },
-  fat: { current: 46, goal: 67 },
-  fiber: { current: 18, goal: 25 },
-  water: { current: 6, goal: 8 },
-};
-
-const mockMeals: Meal[] = [
-  {
-    id: '1',
-    name: 'Oatmeal with berries, Greek yogurt',
-    time: '8:30am',
-    calories: 445,
-    protein: 24,
-    carbs: 58,
-    fat: 12,
-  },
-  {
-    id: '2',
-    name: 'Grilled chicken salad, Whole grain bread',
-    time: '12:45pm',
-    calories: 620,
-    protein: 45,
-    carbs: 52,
-    fat: 18,
-  },
-  {
-    id: '3',
-    name: 'Protein bar, Almonds',
-    time: '3:15pm',
-    calories: 320,
-    protein: 22,
-    carbs: 28,
-    fat: 14,
-  },
-];
+import { FullScreenLoader } from '../components/ui';
 
 interface HomeScreenProps {
   onOpenChat: () => void;
@@ -58,9 +21,32 @@ interface HomeScreenProps {
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenChat }) => {
   const [activeTab, setActiveTab] = useState<'today' | '30days'>('today');
-  const [meals, setMeals] = useState<Meal[]>(mockMeals);
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const {
+    meals,
+    isLoading: mealsLoading,
+    error: mealsError,
+    isSaving,
+    updateMeal,
+    deleteMeal,
+    fetchMeals,
+    clearError,
+  } = useMeals();
+
+  const {
+    stats,
+    isLoading: statsLoading,
+    fetchStats,
+  } = useNutrition();
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([fetchMeals(), fetchStats()]);
+    setRefreshing(false);
+  }, [fetchMeals, fetchStats]);
 
   const handleMenuPress = () => {
     console.log('Menu pressed');
@@ -73,23 +59,45 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenChat }) => {
   const handleEditMeal = (meal: Meal) => {
     setEditingMeal(meal);
     setIsModalVisible(true);
+    clearError();
   };
 
-  const handleDeleteMeal = (meal: Meal) => {
-    setMeals((prev) => prev.filter((m) => m.id !== meal.id));
+  const handleDeleteMeal = async (meal: Meal) => {
+    try {
+      await deleteMeal(meal.id);
+    } catch {
+      console.error('Failed to delete meal');
+    }
   };
 
-  const handleSaveMeal = (updatedMeal: Meal) => {
-    setMeals((prev) =>
-      prev.map((m) => (m.id === updatedMeal.id ? updatedMeal : m))
-    );
-    setIsModalVisible(false);
-    setEditingMeal(null);
+  const handleSaveMeal = async (updatedMeal: Meal) => {
+    try {
+      await updateMeal(updatedMeal);
+      setIsModalVisible(false);
+      setEditingMeal(null);
+    } catch {
+      console.error('Failed to save meal');
+    }
   };
 
   const handleCloseModal = () => {
     setIsModalVisible(false);
     setEditingMeal(null);
+  };
+
+  const isInitialLoading = (mealsLoading || statsLoading) && !refreshing && meals.length === 0;
+
+  if (isInitialLoading) {
+    return <FullScreenLoader message="Loading your nutrition data..." />;
+  }
+
+  const currentStats = stats || {
+    calories: { current: 0, goal: 2000 },
+    protein: { current: 0, goal: 150 },
+    carbs: { current: 0, goal: 250 },
+    fat: { current: 0, goal: 67 },
+    fiber: { current: 0, goal: 25 },
+    water: { current: 0, goal: 8 },
   };
 
   return (
@@ -99,6 +107,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenChat }) => {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
       >
         <Header
           activeTab={activeTab}
@@ -106,30 +122,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenChat }) => {
           onMenuPress={handleMenuPress}
         />
 
+        {mealsError && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>
+              Something went wrong. Pull to refresh.
+            </Text>
+          </View>
+        )}
+
         <CaloriesCard
-          current={mockStats.calories.current}
-          goal={mockStats.calories.goal}
+          current={currentStats.calories.current}
+          goal={currentStats.calories.goal}
         />
 
         <MacrosCard
-          protein={mockStats.protein}
-          carbs={mockStats.carbs}
-          fat={mockStats.fat}
+          protein={currentStats.protein}
+          carbs={currentStats.carbs}
+          fat={currentStats.fat}
         />
 
         <View style={styles.statsRow}>
           <StatCard
             title="Fiber"
-            current={mockStats.fiber.current}
-            goal={mockStats.fiber.goal}
+            current={currentStats.fiber.current}
+            goal={currentStats.fiber.goal}
             unit="g"
             backgroundColor={colors.fiber}
             style={styles.statCard}
           />
           <StatCard
             title="Water"
-            current={mockStats.water.current}
-            goal={mockStats.water.goal}
+            current={currentStats.water.current}
+            goal={currentStats.water.goal}
             unit="cups"
             backgroundColor={colors.water}
             style={styles.statCard}
@@ -152,6 +176,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onOpenChat }) => {
           meal={editingMeal}
           onSave={handleSaveMeal}
           onClose={handleCloseModal}
+          isSaving={isSaving}
         />
       )}
     </SafeAreaView>
@@ -171,11 +196,23 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    gap: 12,
-    marginBottom: 8,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+    marginBottom: spacing.sm,
   },
   statCard: {
     flex: 1,
+  },
+  errorBanner: {
+    backgroundColor: colors.error,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    borderRadius: spacing.sm,
+  },
+  errorText: {
+    color: colors.textLight,
+    textAlign: 'center',
+    fontWeight: '500',
   },
 });
